@@ -8,6 +8,10 @@
 #include "sd_functions.h"
 #include "settingsColor.h"
 #include "utils.h"
+#if defined(ARDUINO_M5STICK_C_PLUS2)
+#include <M5Unified.h>
+#include <math.h>
+#endif
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <globals.h>
 
@@ -734,6 +738,11 @@ void setClock() {
 
 void runClockLoop() {
     int tmp = 0;
+    // Raise-to-wake state (M5StickC Plus2) - simplified, low-power
+    unsigned long lastImuSample = 0;          // sampling cadence
+    unsigned long lastWakeTriggerMs = 0;      // refractory after wake
+    bool raiseWindow = false;                 // small motion window when wrist starts moving
+    unsigned long raiseWindowStartMs = 0;
 
 #if defined(HAS_RTC)
     _rtc.GetBm8563Time();
@@ -786,6 +795,57 @@ void runClockLoop() {
 #endif
             tmp = millis();
         }
+
+        // Raise-to-wake on M5StickC Plus2 when dim/off
+#if defined(ARDUINO_M5STICK_C_PLUS2)
+        if ((isScreenOff || dimmer)) {
+            const unsigned long nowMs = millis();
+            // sample at ~25 Hz to save power
+            if (nowMs - lastImuSample > 40) {
+                lastImuSample = nowMs;
+
+                float ax, ay, az, gx, gy, gz;
+                // Use lower-power IMU read cadence: accel each tick, gyro sparsely
+                M5.Imu.getAccel(&ax, &ay, &az);
+                if ((nowMs / 80) != ((nowMs - 40) / 80)) {
+                    M5.Imu.getGyro(&gx, &gy, &gz);
+                } else {
+                    gx = gy = gz = 0.0f;
+                }
+
+                const float gMag = sqrtf(ax * ax + ay * ay + az * az);
+                const float gyroMag = sqrtf(gx * gx + gy * gy + gz * gz); // dps
+
+                float cosUp = (gMag > 0.0001f) ? (az / gMag) : 0.0f;
+                if (cosUp > 1.0f) cosUp = 1.0f; else if (cosUp < -1.0f) cosUp = -1.0f;
+                const float tiltDeg = acosf(cosUp) * 180.0f / 3.14159265f; // 0=face-up, ~90=vertical
+
+                const bool gravityOk = (gMag > 0.7f && gMag < 1.3f);
+                const bool nearViewingAngle = (tiltDeg >= 50.0f && tiltDeg <= 100.0f); // more like user-facing
+                const bool inRefractory = (nowMs - lastWakeTriggerMs) < 1500;
+
+                if (!inRefractory && !raiseWindow && gyroMag > 40.0f) {
+                    raiseWindow = true;
+                    raiseWindowStartMs = nowMs;
+                }
+
+                if (raiseWindow) {
+                    const unsigned long elapsed = nowMs - raiseWindowStartMs;
+                    if (elapsed <= 250) {
+                        // Succeed if we land near viewing angle with stable motion
+                        if (gravityOk && nearViewingAngle && gyroMag < 20.0f) {
+                            if (wakeUpScreen()) lastWakeTriggerMs = nowMs;
+                            raiseWindow = false;
+                        }
+                    } else {
+                        raiseWindow = false; // timeout
+                    }
+                }
+            }
+        } else {
+            raiseWindow = false;
+        }
+#endif
 
         // Checks para sair do loop
         if (check(SelPress) or check(EscPress)) { // Apertar o botão power dos sticks

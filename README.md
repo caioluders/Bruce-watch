@@ -5,6 +5,13 @@
 Bruce is meant to be a versatile ESP32 firmware that supports a ton of offensive features focusing on facilitating Red Team operations.
 It also supports m5stack products and works great with Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
 
+## :watch: Bruce Watch (this fork)
+
+Focused on smartwatch-like behavior, tailored for the M5StickC Plus2.
+
+- Raise-to-wake in Clock app (IMU-based wrist lift detection; wakes screen when dim/off)
+- IMU initialization and low-rate sampling optimized for clock use
+
 ## :building_construction: How to install
 
 ### The easiest way to install Bruce is using our official Web Flasher!

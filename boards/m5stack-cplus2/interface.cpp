@@ -1,5 +1,6 @@
 #include "core/powerSave.h"
 #include <driver/adc.h>
+#include <M5Unified.h>
 #include <esp_adc_cal.h>
 #include <interface.h>
 #include <soc/adc_channel.h>
@@ -11,6 +12,10 @@
 ** Description:   initial setup for the device
 ***************************************************************************************/
 void _setup_gpio() {
+    auto cfg = M5.config();
+    cfg.internal_imu = true;
+    M5.begin(cfg);
+    M5.Imu.begin();
     pinMode(UP_BTN, INPUT); // Sets the power btn as an INPUT
     pinMode(SEL_BTN, INPUT);
     pinMode(DW_BTN, INPUT);
